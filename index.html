@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Haunted House Escape</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: #0a0a0c;
+      color: #e0e0e0;
+      font-family: 'Courier New', Courier, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #ui {
+      margin-bottom: 10px;
+      display: flex;
+      gap: 30px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    canvas {
+      border: 2px solid #333;
+      background-color: #000;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.9);
+    }
+    #controls {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="ui">
+    <div>Keys: <span id="keyCount">0</span> / 3</div>
+    <div id="status">Find all 3 keys to unlock the green exit!</div>
+  </div>
+  <canvas id="gameCanvas" width="600" height="450"></canvas>
+  <div id="controls">Use <b>Arrow Keys</b> or <b>WASD</b> to move. Press <b>R</b> to restart.</div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const keyDisplay = document.getElementById('keyCount');
+    const statusDisplay = document.getElementById('status');
+
+    const TILE_SIZE = 30;
+    const ROWS = 15;
+    const COLS = 20;
+
+    // 1 = Wall, 0 = Floor, 2 = Exit Door
+    const baseMap = [,
+ ,
+ ,
+ ,
+ ,
+ ,
+ ,
+ ,
+ ,
+ ,
+ ,
+ ,
+ ,
+ ,
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    ];
+
+    let player, keys, ghosts, gameOver, gameWon;
+    const input = {};
+
+    function initGame() {
+      player = { x: 45, y: 45, radius: 9, speed: 2.5, keysCollected: 0 };
+      keys = [
+        { x: 555, y: 45, collected: false },
+        { x: 45, y: 405, collected: false },
+        { x: 315, y: 225, collected: false }
+      ];
+      ghosts = [
+        { x: 255, y: 105, vx: 1.5, vy: 0, radius: 10 },
+        { x: 495, y: 345, vx: 0, vy: 1.5, radius: 10 },
+        { x: 165, y: 285, vx: 1.8, vy: 0, radius: 10 }
+      ];
+      gameOver = false;
+      gameWon = false;
+      keyDisplay.textContent = '0';
+      statusDisplay.textContent = 'Find all 3 keys to unlock the green exit!';
+      statusDisplay.style.color = '#e0e0e0';
+    }
+
+    window.addEventListener('keydown', e => {
+      input[e.key.toLowerCase()] = true;
+      if (e.key.toLowerCase() === 'r') initGame();
+    });
+    window.addEventListener('keyup', e => input[e.key.toLowerCase()] = false);
+
+    function isWall(x, y, radius) {
+      const points = [
+        { x: x - radius, y: y - radius },
+        { x: x + radius, y: y - radius },
+        { x: x - radius, y: y + radius },
+        { x: x + radius, y: y + radius }
+      ];
+      for (let p of points) {
+        const col = Math.floor(p.x / TILE_SIZE);
+        const row = Math.floor(p.y / TILE_SIZE);
+        if (row < 0 || row >= ROWS || col < 0 || col >= COLS || baseMap[row][col] === 1) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function update() {
+      if (gameOver || gameWon) return;
+
+      // Player movement
+      let dx = 0, dy = 0;
+      if (input['arrowup'] || input['w']) dy -= player.speed;
+      if (input['arrowdown'] || input['s']) dy += player.speed;
+      if (input['arrowleft'] || input['a']) dx -= player.speed;
+      if (input['arrowright'] || input['d']) dx += player.speed;
+
+      if (!isWall(player.x + dx, player.y, player.radius)) player.x += dx;
+      if (!isWall(player.x, player.y + dy, player.radius)) player.y += dy;
+
+      // Check Exit
+      const pCol = Math.floor(player.x / TILE_SIZE);
+      const pRow = Math.floor(player.y / TILE_SIZE);
+      if (baseMap[pRow][pCol] === 2) {
+        if (player.keysCollected === keys.length) {
+          gameWon = true;
+          statusDisplay.textContent = 'YOU ESCAPED! Press R to play again.';
+          statusDisplay.style.color = '#4caf50';
+        } else {
+          statusDisplay.textContent = 'Locked! Collect all 3 keys first!';
+          statusDisplay.style.color = '#ff9800';
+        }
+      }
+
+      // Collect Keys
+      keys.forEach(k => {
+        if (!k.collected && Math.hypot(player.x - k.x, player.y - k.y) < player.radius + 8) {
+          k.collected = true;
+          player.keysCollected++;
+          keyDisplay.textContent = player.keysCollected;
+          if (player.keysCollected === keys.length) {
+            statusDisplay.textContent = 'All keys found! Head to the green exit!';
+            statusDisplay.style.color = '#4caf50';
+          }
+        }
+      });
+
+      // Move Ghosts & Check Collision
+      ghosts.forEach(g => {
+        if (isWall(g.x + g.vx, g.y, g.radius)) g.vx *= -1;
+        if (isWall(g.x, g.y + g.vy, g.radius)) g.vy *= -1;
+        g.x += g.vx;
+        g.y += g.vy;
+
+        if (Math.hypot(player.x - g.x, player.y - g.y) < player.radius + g.radius) {
+          gameOver = true;
+          statusDisplay.textContent = 'CAUGHT BY A GHOST! Press R to retry.';
+          statusDisplay.style.color = '#f44336';
+        }
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Map
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (baseMap[r][c] === 1) {
+            ctx.fillStyle = '#22222b';
+            ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          } else if (baseMap[r][c] === 2) {
+            ctx.fillStyle = player.keysCollected === keys.length ? '#2e7d32' : '#5c2b29';
+            ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          } else {
+            ctx.fillStyle = '#111116';
+            ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          }
+        }
+      }
+
+      // Draw Keys
+      keys.forEach(k => {
+        if (!k.collected) {
+          ctx.fillStyle = '#ffd700';
+          ctx.beginPath();
+          ctx.arc(k.x, k.y, 6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      // Draw Player
+      ctx.fillStyle = '#4fc3f7';
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw Ghosts
+      ghosts.forEach(g => {
+        ctx.fillStyle = 'rgba(255, 82, 82, 0.85)';
+        ctx.beginPath();
+        ctx.arc(g.x, g.y, g.radius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Flashlight Darkness Effect
+      if (!gameOver && !gameWon) {
+        const gradient = ctx.createRadialGradient(
+          player.x, player.y, 25,
+          player.x, player.y, 110
+        );
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.96)');
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    initGame();
+    loop();
+  </script>
+</body>
+</html>
